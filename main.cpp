@@ -1,26 +1,30 @@
-#include <iostream>
+// validation of the residual ratio tracking algorithm for free path sampling
+// and transmittance estimation in arbitrary inhomogeneous medium
+
 #include <GL/freeglut.h>
-#include <glm/glm.hpp>
-#include <random>
 #include <algorithm>
-#include <vector>
-#include <memory>
 #include <cstdint>
-#include <iostream>
-#include <sstream>
+#include <glm/glm.hpp>
 #include <iomanip>
+#include <iostream>
+#include <memory>
+#include <random>
+#include <sstream>
+#include <vector>
+
 using glm::vec2;
 using std::cout;
 using std::endl;
+
 std::uniform_real_distribution<double> dist(0.0, 1.0);
-std::mt19937_64 rng;
-double randf()
+std::mt19937_64                        rng;
+double                                 randf()
 {
     return dist(rng);
 }
 
 std::string title;
-void set_window_title(double mse)
+void        set_window_title(double mse)
 {
     std::stringstream ss;
     ss << std::setiosflags(std::ios::fixed) << std::setprecision(6);
@@ -32,13 +36,22 @@ void set_window_title(double mse)
 int width = 300;
 int height = 300;
 
+enum Profile
+{
+    CONSTANT,
+    LINEAR,
+    PARABOLIC
+};
+
+Profile profile = LINEAR;
+
 //////////////////////////////////////////////////////////////////////////
 static double max_dist = 0;
 static double max_cost = 0;
 
 double sample_free_path(double sigma, double rnd)
 {
-    double s = -std::log(rnd + DBL_MIN) / sigma; // log(0) -> -INF
+    double s = -std::log(rnd + DBL_MIN) / sigma;  // log(0) -> -INF
     if (s > max_dist)
     {
         max_dist = s;
@@ -65,10 +78,10 @@ private:
 
 protected:
     const double m_length = 2.0;
-    double m_majorant; // must be higher than sigma
-    double m_sigma_control;
+    double       m_majorant;  // must be higher than sigma
+    double       m_sigma_control;
 
-    double m_estimate_sum = 0;
+    double   m_estimate_sum = 0;
     uint64_t m_cost_sum = 0;
     uint64_t m_num_samples = 0;
 
@@ -78,38 +91,60 @@ public:
     {
         // density distribution :
 
-        // 1) constant
-        m_analytic_transmittance = std::exp(-m_sigma * m_length);
-        m_majorant = sigma / sampling_efficiency;
-        m_sigma_control = sigma; // min, max, average extinction coefficients are all the same
-
-        // 2) linear
-//         m_analytic_transmittance = std::exp(-m_sigma * m_length * 3.0 / 2.0);
-//         m_majorant = (2 * sigma) / sampling_efficiency;
-//         // m_sigma_control = sigma; // min extinction coefficient
-//         // m_sigma_control = 2 * sigma; // max extinction coefficient
-//         m_sigma_control = 1.5 * sigma; // average extinction coefficient (mostly optimal)
-
-        // 3) parabolic
-//         m_analytic_transmittance = std::exp(-m_sigma * m_length / 3.0);
-//         m_majorant = sigma / sampling_efficiency;
-//         // m_sigma_control = 0; // min extinction coefficient
-//         // m_sigma_control = sigma; // max extinction coefficient
-//         m_sigma_control = sigma / 3.0; // average extinction coefficient (mostly optimal)
+        switch (profile)
+        {
+            default:
+            case CONSTANT:
+                // 1) constant
+                m_analytic_transmittance = std::exp(-m_sigma * m_length);
+                m_majorant = sigma / sampling_efficiency;
+                m_sigma_control =
+                    sigma;  // min, max, average extinction coefficients
+                            // are all the same
+                break;
+            case LINEAR:
+                // 2) linear
+                m_analytic_transmittance =
+                    std::exp(-m_sigma * m_length * 3.0 / 2.0);
+                m_majorant = (2 * sigma) / sampling_efficiency;
+                // m_sigma_control = sigma; // min extinction coefficient
+                // m_sigma_control = 2 * sigma; // max extinction coefficient
+                m_sigma_control =
+                    1.5 *
+                    sigma;  // average extinction coefficient (mostly optimal)
+                break;
+            case PARABOLIC:
+                // 3) parabolic
+                m_analytic_transmittance = std::exp(-m_sigma * m_length / 3.0);
+                m_majorant = sigma / sampling_efficiency;
+                // m_sigma_control = 0; // min extinction coefficient
+                // m_sigma_control = sigma; // max extinction coefficient
+                m_sigma_control =
+                    sigma /
+                    3.0;  // average extinction coefficient (mostly optimal)
+                break;
+        }
     }
 
-    float sigma(float p) const
+    double sigma(double p) const
     {
         // density distribution :
-
-        // 1) constant
-        return m_sigma;
-
-        // 2) linear
-//         return m_sigma * (1 + p / m_length);
-
-        // 3) parabolic
-//         return m_sigma * (p / m_length) * (p / m_length);
+        switch (profile)
+        {
+            default:
+            case CONSTANT:
+                // 1) constant
+                return m_sigma;
+                break;
+            case LINEAR:
+                // 2) linear
+                return m_sigma * (1 + p / m_length);
+                break;
+            case PARABOLIC:
+                // 3) parabolic
+                return m_sigma * (p / m_length) * (p / m_length);
+                break;
+        }
     }
 
     virtual void sample() = 0;
@@ -133,7 +168,7 @@ public:
     }
     double square_error() const
     {
-        float d = (estimate_transmittance() - reference_transmittance());
+        double d = (estimate_transmittance() - reference_transmittance());
         return d * d;
     }
 };
@@ -144,7 +179,7 @@ private:
     void sample()
     {
         // delta tracking
-        double e = 1; // transmittance estimate
+        double e = 1;  // transmittance estimate
         double p = 0;
         for (;;)
         {
@@ -172,7 +207,6 @@ public:
     DeltaTrackingEstimator(double sampling_efficiency, double sigma)
         : TransmittanceEstimator(sampling_efficiency, sigma)
     {
-
     }
 };
 
@@ -182,7 +216,7 @@ private:
     void sample()
     {
         // ratio tracking
-        double e = 1; // transmittance estimate
+        double e = 1;  // transmittance estimate
         double p = 0;
         for (;;)
         {
@@ -206,7 +240,6 @@ public:
     RatioTrackingEstimator(double sampling_efficiency, double sigma)
         : TransmittanceEstimator(sampling_efficiency, sigma)
     {
-
     }
 };
 
@@ -216,7 +249,7 @@ private:
     void sample()
     {
         // ratio tracking
-        double e = 1; // transmittance estimate
+        double e = 1;  // transmittance estimate
         double e_c = std::exp(-m_sigma_control * m_length);
         double p = 0;
         for (;;)
@@ -242,7 +275,6 @@ public:
     ResidualRatioTrackingEstimator(double sampling_efficiency, double sigma)
         : TransmittanceEstimator(sampling_efficiency, sigma)
     {
-
     }
 };
 
@@ -250,10 +282,10 @@ typedef enum { DrawEstimate, DrawReference, DrawCost } DrawType;
 
 class VolumeSampler
 {
-    std::vector<std::unique_ptr<TransmittanceEstimator>> ss;
-    DrawType type = DrawEstimate;
-public:
+    std::vector<std::unique_ptr<TransmittanceEstimator> > ss;
+    DrawType                                              type = DrawEstimate;
 
+public:
     VolumeSampler()
     {
         reset<DeltaTrackingEstimator>();
@@ -272,7 +304,7 @@ public:
     }
 
     // configuration
-    template<typename EstimatorType>
+    template <typename EstimatorType>
     void reset()
     {
         max_dist = 0;
@@ -288,15 +320,16 @@ public:
                     double x = (i + 0.5) / width;
                     double y = (j + 0.5) / height;
 
-                    // characteristic extinction coefficient, but not used for bounding
-                    // higher more opaque
+                    // characteristic extinction coefficient, but not used for
+                    // bounding higher more opaque
                     double sigma = std::exp(-2 + x * 2);
 
                     // the ratio of max sigma and majorant, lower more costly
                     // cannot be handled by delta tracking if larger than 1
                     double sampling_efficiency = sigma * (0.1 + y * 0.9);
 
-                    ss[i + j * width].reset(new EstimatorType(sampling_efficiency, sigma));
+                    ss[i + j * width].reset(
+                        new EstimatorType(sampling_efficiency, sigma));
                 }
             }
         }
@@ -304,10 +337,15 @@ public:
 
     void draw()
     {
-        max_cost = std::max_element(ss.begin(), ss.end(), [](std::unique_ptr<TransmittanceEstimator>& a, std::unique_ptr<TransmittanceEstimator>& b) -> bool
-        {
-            return a->mean_cost() < b->mean_cost();
-        })->get()->mean_cost();
+        max_cost = std::max_element(
+                       ss.begin(),
+                       ss.end(),
+                       [](std::unique_ptr<TransmittanceEstimator>& a,
+                          std::unique_ptr<TransmittanceEstimator>& b) -> bool {
+                           return a->mean_cost() < b->mean_cost();
+                       })
+                       ->get()
+                       ->mean_cost();
 
         double mean_error = 0;
 
@@ -326,28 +364,28 @@ public:
 
                 switch (type)
                 {
-                default:
-                case DrawEstimate:
-                {
-                    double c = e->estimate_transmittance();
-                    glColor3f(c, c, c);
-                }
-                break;
-                case DrawReference:
-                {
-                    double c = e->reference_transmittance();
-                    glColor3f(c, c, c);
-                }
-                break;
-                case DrawCost:
-                {
-                    double c = e->mean_cost() / max_cost;
-                    glColor3f(c, c, c);
-                }
-                break;
+                    default:
+                    case DrawEstimate:
+                    {
+                        float c = (float)e->estimate_transmittance();
+                        glColor3f(c, c, c);
+                    }
+                    break;
+                    case DrawReference:
+                    {
+                        float c = (float)e->reference_transmittance();
+                        glColor3f(c, c, c);
+                    }
+                    break;
+                    case DrawCost:
+                    {
+                        float c = (float)(e->mean_cost() / max_cost);
+                        glColor3f(c, c, c);
+                    }
+                    break;
                 }
 
-                glVertex2f((i + 0.5) / width, (j + 0.5) / height);
+                glVertex2f((i + 0.5f) / width, (j + 0.5f) / height);
             }
         }
         glEnd();
@@ -364,15 +402,32 @@ void keyboard(unsigned char key, int x, int y)
 {
     switch (key)
     {
-    default:                                                        break;
-    case ' ':       vol.info();                                     break;
-    case 'r':       vol.reset<DeltaTrackingEstimator>();            break;
-    case 't':       vol.reset<RatioTrackingEstimator>();            break;
-    case 'f':       vol.reset<ResidualRatioTrackingEstimator>();    break;
-    case 'q':       exit(0);                                        break;
-    case 'e':       vol.toggle(DrawEstimate);                       break;
-    case 'd':       vol.toggle(DrawReference);                      break;
-    case 'c':       vol.toggle(DrawCost);                           break;
+        default:
+            break;
+        case ' ':
+            vol.info();
+            break;
+        case 'r':
+            vol.reset<DeltaTrackingEstimator>();
+            break;
+        case 't':
+            vol.reset<RatioTrackingEstimator>();
+            break;
+        case 'f':
+            vol.reset<ResidualRatioTrackingEstimator>();
+            break;
+        case 'q':
+            exit(0);
+            break;
+        case 'e':
+            vol.toggle(DrawEstimate);
+            break;
+        case 'd':
+            vol.toggle(DrawReference);
+            break;
+        case 'c':
+            vol.toggle(DrawCost);
+            break;
     }
 }
 
@@ -386,8 +441,17 @@ void display()
     glutPostRedisplay();
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
+    cout << "space | volume estimator info" << endl;
+    cout << "r     | reset to delta tracking estimator" << endl;
+    cout << "t     | reset to ratio tracking estimator" << endl;
+    cout << "f     | reset to residual ratio tracking estimator" << endl;
+    cout << "e     | visualize transmittance estimation" << endl;
+    cout << "d     | visualize transmittance ground truth" << endl;
+    cout << "c     | visualize cost" << endl;
+    cout << "q     | quit" << endl;
+
     glutInit(&argc, argv);
     glutInitWindowPosition(1000, 0);
     glutInitWindowSize(width, height);
