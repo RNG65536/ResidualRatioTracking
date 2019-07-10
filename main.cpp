@@ -1,13 +1,5 @@
 #include <iostream>
-#ifndef NDEBUG
-#define DEBUGMODE
-#define NDEBUG
-#endif
 #include <GL/freeglut.h>
-#ifdef DEBUGMODE
-#undef DEBUGMODE
-#undef NDEBUG
-#endif
 #include <glm/glm.hpp>
 #include <random>
 #include <algorithm>
